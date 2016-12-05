@@ -270,9 +270,10 @@ namespace Microsoft.Xna.Framework.Audio
 
             // Notes:
             //
-            // The originally implementation was based on the MSDN reference for panning
+            // The original implementation was based on the MSDN reference for panning
             // a mono source. However, that broke down for stereo sources as the matrix
-            // size needed to double. Instead, we've chosen a new method that takes the
+            // size should have doubled to handle stereo sources across 8 channels of audio.
+            // Instead, we've chosen a new method that takes the
             // source channels into account while calculating the pan. Note: this may only
             // pan across the front speakers in a multispeaker setup.
             // For reference, see: https://github.com/MonoGame/MonoGame/issues/5054
