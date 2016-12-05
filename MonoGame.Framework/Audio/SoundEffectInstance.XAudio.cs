@@ -254,85 +254,53 @@ namespace Microsoft.Xna.Framework.Audio
 
             // Set the pan on the correct channels based on the reverb mix.
             if (!(_reverbMix > 0.0f))
-                _voice.SetOutputMatrix(srcChannelCount, dstChannelCount, CalculatePanMatrix(_pan, 1.0f));
+                _voice.SetOutputMatrix(srcChannelCount, dstChannelCount, CalculatePanMatrix(_pan, 1.0f, srcChannelCount));
             else
             {
-                _voice.SetOutputMatrix(SoundEffect.ReverbVoice, srcChannelCount, dstChannelCount, CalculatePanMatrix(_pan, _reverbMix));
-                _voice.SetOutputMatrix(SoundEffect.MasterVoice, srcChannelCount, dstChannelCount, CalculatePanMatrix(_pan, 1.0f - Math.Min(_reverbMix, 1.0f)));
+                _voice.SetOutputMatrix(SoundEffect.ReverbVoice, srcChannelCount, dstChannelCount, CalculatePanMatrix(_pan, _reverbMix, srcChannelCount));
+                _voice.SetOutputMatrix(SoundEffect.MasterVoice, srcChannelCount, dstChannelCount, CalculatePanMatrix(_pan, 1.0f - Math.Min(_reverbMix, 1.0f), srcChannelCount));
             }
         }
 
-        private static float[] CalculatePanMatrix(float pan, float scale)
+        private static float[] CalculatePanMatrix(float pan, float scale, int srcChannels)
         {
-            // From X3DAudio documentation:
-            /*
-                For submix and mastering voices, and for source voices without a channel mask or a channel mask of 0, 
-                   XAudio2 assumes default speaker positions according to the following table. 
-
-                Channels
-
-                Implicit Channel Positions
-
-                1 Always maps to FrontLeft and FrontRight at full scale in both speakers (special case for mono sounds) 
-                2 FrontLeft, FrontRight (basic stereo configuration) 
-                3 FrontLeft, FrontRight, LowFrequency (2.1 configuration) 
-                4 FrontLeft, FrontRight, BackLeft, BackRight (quadraphonic) 
-                5 FrontLeft, FrontRight, FrontCenter, SideLeft, SideRight (5.0 configuration) 
-                6 FrontLeft, FrontRight, FrontCenter, LowFrequency, SideLeft, SideRight (5.1 configuration) (see the following remarks) 
-                7 FrontLeft, FrontRight, FrontCenter, LowFrequency, SideLeft, SideRight, BackCenter (6.1 configuration) 
-                8 FrontLeft, FrontRight, FrontCenter, LowFrequency, BackLeft, BackRight, SideLeft, SideRight (7.1 configuration) 
-                9 or more No implicit positions (one-to-one mapping)                      
-             */
-
             // Clear all the channels.
             var panMatrix = _panMatrix;
             Array.Clear(panMatrix, 0, panMatrix.Length);
 
             // Notes:
             //
-            // Since XNA does not appear to expose any 'master' voice channel mask / speaker configuration,
-            // I assume the mappings listed above should be used.
-            //
-            // Assuming it is correct to pan all channels which have a left/right component.
+            // The originally implementation was based on the MSDN reference for panning
+            // a mono source. However, that broke down for stereo sources as the matrix
+            // size needed to double. Instead, we've chosen a new method that takes the
+            // source channels into account while calculating the pan. Note: this may only
+            // pan across the front speakers in a multispeaker setup.
+            // For reference, see: https://github.com/MonoGame/MonoGame/issues/5054
 
-            var lVal = (1.0f - pan) * scale;
-            var rVal = (1.0f + pan) * scale;
+            var lVal = (pan >= 0 ? (1.0f - pan) : 1.0f) * scale;
+            var rVal = (pan <= 0 ? (-pan - 1.0f) : 1.0f) * scale;
 
-            switch (SoundEffect.Speakers)
+            if (srcChannels == 1)
             {
-                case Speakers.Stereo:
-                case Speakers.TwoPointOne:
-                case Speakers.Surround:
-                    panMatrix[0] = lVal;
-                    panMatrix[1] = rVal;
-                    break;
-
-                case Speakers.Quad:
-                    panMatrix[0] = panMatrix[2] = lVal;
-                    panMatrix[1] = panMatrix[3] = rVal;
-                    break;
-
-                case Speakers.FourPointOne:
-                    panMatrix[0] = panMatrix[3] = lVal;
-                    panMatrix[1] = panMatrix[4] = rVal;
-                    break;
-
-                case Speakers.FivePointOne:
-                case Speakers.SevenPointOne:
-                case Speakers.FivePointOneSurround:
-                    panMatrix[0] = panMatrix[4] = lVal;
-                    panMatrix[1] = panMatrix[5] = rVal;
-                    break;
-
-                case Speakers.SevenPointOneSurround:
-                    panMatrix[0] = panMatrix[4] = panMatrix[6] = lVal;
-                    panMatrix[1] = panMatrix[5] = panMatrix[7] = rVal;
-                    break;
-
-                case Speakers.Mono:
-                default:
-                    // don't do any panning here   
-                    break;
+                panMatrix[0] = lVal;
+                panMatrix[1] = rVal;
+            }
+            else if (srcChannels == 2)
+            {
+                if (-1.0f <= pan && pan <= 0.0f)
+                {
+                    panMatrix[0] = (0.5f * pan + 1.0f) * scale;
+                    panMatrix[1] = (0.5f * -pan) * scale;
+                    panMatrix[2] = 0.0f;
+                    panMatrix[3] = (pan + 1.0f) * scale;
+                }
+                else
+                {
+                    panMatrix[0] = (-pan + 1.0f) * scale;
+                    panMatrix[1] = 0.0f;
+                    panMatrix[2] = (0.5f * pan) * scale;
+                    panMatrix[3] = (0.5f * -pan + 1.0f) * scale;
+                }
             }
 
             return panMatrix;
